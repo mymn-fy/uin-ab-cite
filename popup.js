@@ -1,33 +1,70 @@
-// --- FUNGSI SMART CASING ---
 function smartCase(str) {
     if (!str) return "";
-    if (str === str.toUpperCase()) {
+    // Check if the string is in all caps and not a short acronym
+    if (str === str.toUpperCase() && str.length > 3) {
+        // Convert to lowercase and capitalize the first letter of each word
         return str.toLowerCase().replace(/\b\w/g, char => char.toUpperCase());
     }
+    // Otherwise, return the original string
     return str;
 }
 
-// --- FUNGSI FORMATTER NAMA ---
-function formatNameAPA(full) {
-    if (!full) return "Anonim";
-    let parts = full.trim().split(" ");
-    if (parts.length > 1) {
-        let last = smartCase(parts.pop());
-        let firstInitial = parts[0].charAt(0).toUpperCase();
-        return `${last}, ${firstInitial}.`;
+function formatAuthorsAPA(authors) {
+    if (authors.length === 0) return "Anonim";
+    
+    const formattedNames = authors.map(full => {
+        let parts = full.trim().split(" ");
+        if (parts.length > 1) {
+            let last = smartCase(parts.pop());
+            let firstInitial = parts[0].charAt(0).toUpperCase();
+            return `${last}, ${firstInitial}.`;
+        }
+        return smartCase(full);
+    });
+
+    if (formattedNames.length === 1) {
+        return formattedNames[0];
+    } else if (formattedNames.length === 2) {
+        return formattedNames.join(' & ');
+    } else if (formattedNames.length > 2 && formattedNames.length <= 20) {
+        return `${formattedNames.slice(0, -1).join(', ')}, & ${formattedNames.slice(-1)}`;
+    } else { // More than 20 authors
+        return `${formattedNames.slice(0, 19).join(', ')}, ..., ${formattedNames.slice(-1)}`;
     }
-    return smartCase(full);
 }
 
-function formatNameChiBib(full) {
-    if (!full) return "Anonim";
-    let parts = full.trim().split(" ");
-    if (parts.length > 1) {
-        let last = smartCase(parts.pop());
-        let first = smartCase(parts.join(" "));
-        return `${last}, ${first}`;
+function formatAuthorsChiBib(authors) {
+    if (authors.length === 0) return "Anonim";
+
+    const formattedNames = authors.map((full, index) => {
+        let parts = full.trim().split(" ");
+        if (parts.length > 1) {
+            let last = smartCase(parts.pop());
+            let first = smartCase(parts.join(" "));
+            // Invert only the first author's name
+            return (index === 0) ? `${last}, ${first}` : `${first} ${last}`;
+        }
+        return smartCase(full);
+    });
+
+    if (formattedNames.length === 1) {
+        return formattedNames[0];
+    } else {
+        return `${formattedNames.slice(0, -1).join(', ')}, and ${formattedNames.slice(-1)}`;
     }
-    return smartCase(full);
+}
+
+function formatAuthorsChiFoot(authors) {
+    if (authors.length === 0) return "Anonim";
+    const formattedNames = authors.map(full => smartCase(full));
+
+    if (formattedNames.length === 1) {
+        return formattedNames[0];
+    } else if (formattedNames.length <= 3) {
+        return `${formattedNames.slice(0, -1).join(', ')} and ${formattedNames.slice(-1)}`;
+    } else { // 4 or more authors
+        return `${smartCase(authors[0].split(" ").join(" "))} et al.`;
+    }
 }
 
 // --- LOGIKA UTAMA ---
@@ -51,10 +88,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 if (response) {
                     document.getElementById('title').value = smartCase(response.title);
-                    document.getElementById('author').value = smartCase(response.author);
+                    // The author response is now a semicolon-separated string
+                    document.getElementById('author').value = response.author.split(';').map(name => smartCase(name.trim())).join('; '); 
                     document.getElementById('journal').value = smartCase(response.journal);
                     document.getElementById('year').value = response.year || "";
-                    document.getElementById('doi').value = response.doi || ""; // Populate DOI field
+                    document.getElementById('doi').value = response.doi || "";
                     statusMsg.innerText = "Data berhasil diekstrak!";
                 } else {
                     statusMsg.innerText = "Tidak ada data yang dapat ditemukan di halaman ini.";
@@ -66,33 +104,42 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnGenerate) {
         btnGenerate.addEventListener('click', () => {
             const title = document.getElementById('title').value.trim();
-            const author = document.getElementById('author').value.trim();
+            // Split the author input by semicolon to get an array of authors
+            const authors = document.getElementById('author').value.split(';').map(name => name.trim()).filter(name => name);
             const journal = document.getElementById('journal').value.trim() || "Nama Jurnal Tidak Diketahui";
-            const year = document.getElementById('year').value.trim() || "t.t."; // (t.t. -> tanpa tahun)
+            const year = document.getElementById('year').value.trim() || "t.t.";
             const doi = document.getElementById('doi').value.trim();
 
-            if (!title || !author) {
+            if (!title || authors.length === 0) {
                 statusMsg.innerText = "Judul dan Penulis wajib diisi.";
                 return;
             }
-            statusMsg.innerText = ""; // Clear status on success
+            statusMsg.innerText = "";
 
             let doiLink = "";
             if (doi) {
-                // Cek jika sudah merupakan URL lengkap
                 if (doi.startsWith('http')) {
                     doiLink = doi;
                 } else {
-                // Jika hanya DOI (misal: 10.xxxx/...), tambahkan prefix
                     doiLink = `https://doi.org/${doi}`;
                 }
             }
 
-            const apaRef = `${formatNameAPA(author)} (${year}). ${title}. <i>${journal}</i>. ${doiLink ? `<a href="${doiLink}" target="_blank">${doiLink}</a>` : ''}`;
-            const apaBody = `(${smartCase(author.split(" ").pop())}, ${year})`;
+            // --- APA 7 ---
+            const apaRef = `${formatAuthorsAPA(authors)} (${year}). ${title}. <i>${journal}</i>. ${doiLink ? `<a href="${doiLink}" target="_blank">${doiLink}</a>` : ''}`;
+            
+            let apaBody = "";
+            if (authors.length === 1) {
+                apaBody = `(${smartCase(authors[0].split(' ').pop())}, ${year})`;
+            } else if (authors.length === 2) {
+                apaBody = `(${smartCase(authors[0].split(' ').pop())} & ${smartCase(authors[1].split(' ').pop())}, ${year})`;
+            } else { // 3 or more
+                apaBody = `(${smartCase(authors[0].split(' ').pop())} et al., ${year})`;
+            }
 
-            const chiBib = `${formatNameChiBib(author)}. "${title}." <i>${journal}</i>, ${year}. ${doiLink ? `<a href="${doiLink}" target="_blank">${doiLink}</a>.` : ''}`;
-            const chiFoot = `${smartCase(author)}, "${title}," <i>${journal}</i> (${year}), ${doiLink ? `akses pada ${doiLink}`: ''}.`;
+            // --- Chicago 17 ---
+            const chiBib = `${formatAuthorsChiBib(authors)}. "${title}." <i>${journal}</i>, ${year}. ${doiLink ? `<a href="${doiLink}" target="_blank">${doiLink}</a>.` : ''}`;
+            const chiFoot = `${formatAuthorsChiFoot(authors)}, "${title}," <i>${journal}</i> (${year}), ${doiLink ? `akses pada ${doiLink}`: ''}.`;
 
             document.getElementById('apa-ref').innerHTML = apaRef;
             document.getElementById('apa-body').innerHTML = apaBody;

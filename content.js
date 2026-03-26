@@ -4,7 +4,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                       document.querySelector('meta[property="og:title"]')?.content || 
                       document.title;
 
-        const author = document.querySelector('meta[name="citation_author"]')?.content || "";
+        const authorElements = document.querySelectorAll('meta[name="citation_author"]');
+        let authors = [];
+        if (authorElements.length > 0) {
+            authors = Array.from(authorElements).map(el => el.content);
+        } else {
+            // Fallback for sites that don't use multiple meta tags
+            const authorString = document.querySelector('meta[name="author"]')?.content;
+            if (authorString) {
+                // Split by common delimiters like comma or 'and'
+                authors = authorString.split(/,| and /i).map(name => name.trim());
+            }
+        }
         
         const journal = document.querySelector('meta[name="citation_journal_title"]')?.content || 
                         document.querySelector('meta[name="citation_publisher"]')?.content || "";
@@ -41,7 +52,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         
         sendResponse({
             title: title,
-            author: author,
+            author: authors.join('; '), // Join authors into a single string
             year: year,
             journal: journal,
             doi: doi // Kirim DOI atau URL
