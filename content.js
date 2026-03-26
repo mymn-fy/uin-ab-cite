@@ -1,27 +1,22 @@
-// Listener untuk menerima perintah dari popup.js
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "extractData") {
-        
-        // Mengambil data dari meta tag (standar jurnal ilmiah)
         const title = document.querySelector('meta[name="citation_title"]')?.content || 
                       document.querySelector('meta[property="og:title"]')?.content || 
                       document.title;
 
-        const author = document.querySelector('meta[name="citation_author"]')?.content || 
-                       "Penulis tidak ditemukan";
-
-        const year = document.querySelector('meta[name="citation_date"]')?.content || 
-                     document.querySelector('meta[name="citation_publication_date"]')?.content || 
-                     "";
+        const author = document.querySelector('meta[name="citation_author"]')?.content || "";
         
-        // Ambil 4 digit tahun saja jika formatnya tanggal lengkap
-        const yearOnly = year.match(/\d{4}/) ? year.match(/\d{4}/)[0] : "";
+        const journal = document.querySelector('meta[name="citation_journal_title"]')?.content || 
+                        document.querySelector('meta[name="citation_publisher"]')?.content || "";
 
-        // Kirim data kembali ke popup.js
+        const date = document.querySelector('meta[name="citation_date"]')?.content || "";
+        const year = date.match(/\d{4}/) ? date.match(/\d{4}/)[0] : "";
+
         sendResponse({
             title: title,
             author: author,
-            year: yearOnly
+            year: year,
+            journal: journal
         });
     }
 });

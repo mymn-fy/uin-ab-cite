@@ -1,9 +1,16 @@
 {
   "manifest_version": 3,
-  "name": "SitasiInstan ID",
-  "version": "1.0",
-  "description": "Ekstensi untuk membuat sitasi otomatis (APA & Chicago) untuk jurnal Indonesia.",
+  "name": "SitasiInstan Pro",
+  "version": "1.1",
+  "description": "Format Otomatis APA 7 & Chicago 17 dengan Smart Casing.",
   "permissions": ["activeTab", "storage"],
+  
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
@@ -12,6 +19,7 @@
       "128": "icons/icon128.png"
     }
   },
+
   "content_scripts": [
     {
       "matches": ["<all_urls>"],

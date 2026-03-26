@@ -1,112 +1,96 @@
-// Fungsi: Membalik Nama Penulis (Budi Santoso -> Santoso, B.)
-function formatAuthorName(authorStr) {
-    if (!authorStr) return "Anonim";
-    let names = authorStr.trim().split(" ");
-    if (names.length > 1) {
-        let lastName = names[names.length - 1];
-        let firstNameInitial = names[0].charAt(0);
-        return `${lastName}, ${firstNameInitial}.`;
+// --- FUNGSI SMART CASING ---
+// Mengubah "JUDUL BESAR SEMUA" menjadi "Judul Besar Semua"
+function smartCase(str) {
+    if (!str) return "";
+    // Jika teks huruf besar semua (caps lock)
+    if (str === str.toUpperCase()) {
+        return str.toLowerCase().replace(/\b\w/g, char => char.toUpperCase());
     }
-    return authorStr;
+    return str; // Jika normal, biarkan saja
 }
 
-// 1. Tombol Ambil Data dari Halaman
+// --- FUNGSI FORMATTER NAMA ---
+function formatNameAPA(full) {
+    if (!full) return "Anonim";
+    let parts = full.trim().split(" ");
+    if (parts.length > 1) {
+        let last = smartCase(parts.pop());
+        let firstInitial = parts[0].charAt(0).toUpperCase();
+        return `${last}, ${firstInitial}.`;
+    }
+    return smartCase(full);
+}
+
+function formatNameChiBib(full) {
+    if (!full) return "Anonim";
+    let parts = full.trim().split(" ");
+    if (parts.length > 1) {
+        let last = smartCase(parts.pop());
+        let first = smartCase(parts.join(" "));
+        return `${last}, ${first}`;
+    }
+    return smartCase(full);
+}
+
+// --- LOGIKA UTAMA ---
 document.getElementById('btn-extract').addEventListener('click', async () => {
     const statusMsg = document.getElementById('status-msg');
     statusMsg.innerText = "Mencari data...";
-
     let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
+    
     chrome.tabs.sendMessage(tab.id, { action: "extractData" }, (response) => {
         if (response) {
-            document.getElementById('title').value = response.title || "";
-            document.getElementById('author').value = response.author || "";
+            // Apply Smart Case langsung saat data diambil
+            document.getElementById('title').value = smartCase(response.title);
+            document.getElementById('author').value = smartCase(response.author);
+            document.getElementById('journal').value = smartCase(response.journal);
             document.getElementById('year').value = response.year || "";
-            statusMsg.innerText = "Data ditemukan!";
-        } else {
-            statusMsg.innerText = "Data tidak ditemukan, isi manual ya.";
+            statusMsg.innerText = "Data ditemukan & diperbaiki!";
         }
     });
 });
 
-// 2. Tombol Buat Format Sitasi
 document.getElementById('btn-generate').addEventListener('click', () => {
-    const title = document.getElementById('title').value;
-    const author = document.getElementById('author').value;
-    const year = document.getElementById('year').value || "n.d.";
+    const title = document.getElementById('title').value.trim();
+    const author = document.getElementById('author').value.trim();
+    const journal = document.getElementById('journal').value.trim() || "Nama Jurnal Tidak Diketahui";
+    const year = document.getElementById('year').value.trim() || "n.d.";
 
-    if (!title || !author) {
-        alert("Isi Judul dan Penulis dulu!");
-        return;
-    }
+    if (!title || !author) { alert("Isi Judul dan Penulis!"); return; }
 
-    // Format APA
-    const fAuthor = formatAuthorName(author);
-    const apa = `${fAuthor} (${year}). ${title}.`;
+    // APA 7: Nama Jurnal & Volume dimiringkan. Judul artikel tidak.
+    const apaRef = `${formatNameAPA(author)} (${year}). ${title}. <i>${journal}</i>.`;
+    const apaBody = `(${smartCase(author.split(" ").pop())}, ${year})`;
 
-    // Format Chicago
-    const chicago = `${author}. "${title}." ${year}.`;
+    // Chicago 17: Judul artikel dalam tanda kutip, Nama Jurnal dimiringkan.
+    const chiBib = `${formatNameChiBib(author)}. "${title}." <i>${journal}</i> (${year}).`;
+    const chiFoot = `${smartCase(author)}, "${title}," <i>${journal}</i> (${year}).`;
 
-    // Tampilkan
-    document.getElementById('apa-result').innerText = apa;
-    document.getElementById('chicago-result').innerText = chicago;
+    // Gunakan innerHTML agar tag <i> berfungsi
+    document.getElementById('apa-ref').innerHTML = apaRef;
+    document.getElementById('apa-body').innerHTML = apaBody;
+    document.getElementById('chi-bib').innerHTML = chiBib;
+    document.getElementById('chi-foot').innerHTML = chiFoot;
+    
     document.getElementById('result-section').style.display = 'block';
 });
 
-// 3. Logika Tombol Copy
+// Logika Copy (Harus bisa copy rich text/HTML miring ke Word)
 document.querySelectorAll('.btn-copy').forEach(button => {
     button.addEventListener('click', (e) => {
         const targetId = e.target.getAttribute('data-target');
-        const text = document.getElementById(targetId).innerText;
+        const el = document.getElementById(targetId);
         
-        navigator.clipboard.writeText(text).then(() => {
-            const originalText = e.target.innerText;
-            e.target.innerText = "Tersalin! ✅";
-            setTimeout(() => { e.target.innerText = originalText; }, 2000);
-        });
+        // Teknik untuk menyalin formatting (miring) agar terbawa ke Word
+        const range = document.createRange();
+        range.selectNode(el);
+        window.getSelection().removeAllRanges();
+        window.getSelection().addRange(range);
+        document.execCommand('copy');
+        window.getSelection().removeAllRanges();
+
+        const originalText = e.target.innerText;
+        e.target.innerText = "Tersalin (Miring)! ✅";
+        setTimeout(() => { e.target.innerText = originalText; }, 2000);
     });
-});
-
-// --- FUNGSI DOWNLOAD FILE ---
-function downloadFile(filename, text) {
-    const element = document.createElement('a');
-    element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
-    element.setAttribute('download', filename);
-    element.style.display = 'none';
-    document.body.appendChild(element);
-    element.click();
-    document.body.removeChild(element);
-}
-
-// 1. Logika Download BibTeX
-document.getElementById('btn-bibtex').addEventListener('click', () => {
-    const title = document.getElementById('title').value;
-    const author = document.getElementById('author').value;
-    const year = document.getElementById('year').value || "2024";
-    
-    // Format BibTeX sederhana
-    const bibtexData = `@article{cite_item,
-  author = {${author}},
-  title = {${title}},
-  year = {${year}},
-  journal = {Diambil via SitasiInstan}
-}`;
-
-    downloadFile("sitasi.bib", bibtexData);
-});
-
-// 2. Logika Download RIS
-document.getElementById('btn-ris').addEventListener('click', () => {
-    const title = document.getElementById('title').value;
-    const author = document.getElementById('author').value;
-    const year = document.getElementById('year').value || "2024";
-
-    // Format RIS standar (TY = Type, AU = Author, TI = Title, PY = Publication Year)
-    const risData = `TY  - JOUR
-AU  - ${author}
-TI  - ${title}
-PY  - ${year}
-ER  - `;
-
-    downloadFile("sitasi.ris", risData);
 });
