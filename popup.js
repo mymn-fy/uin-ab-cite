@@ -1,12 +1,10 @@
 // --- FUNGSI SMART CASING ---
-// Mengubah "JUDUL BESAR SEMUA" menjadi "Judul Besar Semua"
 function smartCase(str) {
     if (!str) return "";
-    // Jika teks huruf besar semua (caps lock)
     if (str === str.toUpperCase()) {
         return str.toLowerCase().replace(/\b\w/g, char => char.toUpperCase());
     }
-    return str; // Jika normal, biarkan saja
+    return str;
 }
 
 // --- FUNGSI FORMATTER NAMA ---
@@ -33,64 +31,91 @@ function formatNameChiBib(full) {
 }
 
 // --- LOGIKA UTAMA ---
-document.getElementById('btn-extract').addEventListener('click', async () => {
+document.addEventListener('DOMContentLoaded', () => {
+
+    const btnExtract = document.getElementById('btn-extract');
+    const btnGenerate = document.getElementById('btn-generate');
     const statusMsg = document.getElementById('status-msg');
-    statusMsg.innerText = "Mencari data...";
-    let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    
-    chrome.tabs.sendMessage(tab.id, { action: "extractData" }, (response) => {
-        if (response) {
-            // Apply Smart Case langsung saat data diambil
-            document.getElementById('title').value = smartCase(response.title);
-            document.getElementById('author').value = smartCase(response.author);
-            document.getElementById('journal').value = smartCase(response.journal);
-            document.getElementById('year').value = response.year || "";
-            statusMsg.innerText = "Data ditemukan & diperbaiki!";
-        }
-    });
-});
 
-document.getElementById('btn-generate').addEventListener('click', () => {
-    const title = document.getElementById('title').value.trim();
-    const author = document.getElementById('author').value.trim();
-    const journal = document.getElementById('journal').value.trim() || "Nama Jurnal Tidak Diketahui";
-    const year = document.getElementById('year').value.trim() || "n.d.";
+    if (btnExtract) {
+        btnExtract.addEventListener('click', async () => {
+            statusMsg.innerText = "Mengekstrak data dari halaman...";
+            let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-    if (!title || !author) { alert("Isi Judul dan Penulis!"); return; }
+            chrome.tabs.sendMessage(tab.id, { action: "extractData" }, (response) => {
+                if (chrome.runtime.lastError) {
+                    statusMsg.innerText = "Gagal terhubung ke halaman. Coba refresh.";
+                    console.error(chrome.runtime.lastError.message);
+                    return;
+                }
+                
+                if (response) {
+                    document.getElementById('title').value = smartCase(response.title);
+                    document.getElementById('author').value = smartCase(response.author);
+                    document.getElementById('journal').value = smartCase(response.journal);
+                    document.getElementById('year').value = response.year || "";
+                    statusMsg.innerText = "Data berhasil diekstrak!";
+                } else {
+                    statusMsg.innerText = "Tidak ada data yang dapat ditemukan di halaman ini.";
+                }
+            });
+        });
+    }
 
-    // APA 7: Nama Jurnal & Volume dimiringkan. Judul artikel tidak.
-    const apaRef = `${formatNameAPA(author)} (${year}). ${title}. <i>${journal}</i>.`;
-    const apaBody = `(${smartCase(author.split(" ").pop())}, ${year})`;
+    if (btnGenerate) {
+        btnGenerate.addEventListener('click', () => {
+            const title = document.getElementById('title').value.trim();
+            const author = document.getElementById('author').value.trim();
+            const journal = document.getElementById('journal').value.trim() || "Nama Jurnal Tidak Diketahui";
+            const year = document.getElementById('year').value.trim() || "t.t."; // (t.t. -> tanpa tahun)
 
-    // Chicago 17: Judul artikel dalam tanda kutip, Nama Jurnal dimiringkan.
-    const chiBib = `${formatNameChiBib(author)}. "${title}." <i>${journal}</i> (${year}).`;
-    const chiFoot = `${smartCase(author)}, "${title}," <i>${journal}</i> (${year}).`;
+            if (!title || !author) {
+                statusMsg.innerText = "Judul dan Penulis wajib diisi.";
+                return;
+            }
+            statusMsg.innerText = ""; // Clear status on success
 
-    // Gunakan innerHTML agar tag <i> berfungsi
-    document.getElementById('apa-ref').innerHTML = apaRef;
-    document.getElementById('apa-body').innerHTML = apaBody;
-    document.getElementById('chi-bib').innerHTML = chiBib;
-    document.getElementById('chi-foot').innerHTML = chiFoot;
-    
-    document.getElementById('result-section').style.display = 'block';
-});
+            const apaRef = `${formatNameAPA(author)} (${year}). ${title}. <i>${journal}</i>.`;
+            const apaBody = `(${smartCase(author.split(" ").pop())}, ${year})`;
 
-// Logika Copy (Harus bisa copy rich text/HTML miring ke Word)
-document.querySelectorAll('.btn-copy').forEach(button => {
-    button.addEventListener('click', (e) => {
-        const targetId = e.target.getAttribute('data-target');
-        const el = document.getElementById(targetId);
-        
-        // Teknik untuk menyalin formatting (miring) agar terbawa ke Word
-        const range = document.createRange();
-        range.selectNode(el);
-        window.getSelection().removeAllRanges();
-        window.getSelection().addRange(range);
-        document.execCommand('copy');
-        window.getSelection().removeAllRanges();
+            const chiBib = `${formatNameChiBib(author)}. "${title}." <i>${journal}</i>, ${year}.`;
+            const chiFoot = `${smartCase(author)}, "${title}," <i>${journal}</i> (${year}).`;
 
-        const originalText = e.target.innerText;
-        e.target.innerText = "Tersalin (Miring)! ✅";
-        setTimeout(() => { e.target.innerText = originalText; }, 2000);
+            document.getElementById('apa-ref').innerHTML = apaRef;
+            document.getElementById('apa-body').innerHTML = apaBody;
+            document.getElementById('chi-bib').innerHTML = chiBib;
+            document.getElementById('chi-foot').innerHTML = chiFoot;
+
+            document.getElementById('result-section').style.display = 'block';
+        });
+    }
+
+    document.querySelectorAll('.btn-copy').forEach(button => {
+        button.addEventListener('click', (e) => {
+            const targetId = e.target.getAttribute('data-target');
+            const el = document.getElementById(targetId);
+
+            const range = document.createRange();
+            range.selectNode(el);
+            window.getSelection().removeAllRanges();
+            window.getSelection().addRange(range);
+            
+            try {
+                document.execCommand('copy');
+                const originalText = e.target.innerHTML;
+                e.target.innerHTML = `Tersalin! <svg width="14" viewBox="0 0 24 24" style="vertical-align: middle;" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+                e.target.style.color = 'var(--success-color)';
+                
+                setTimeout(() => {
+                    e.target.innerHTML = 'Salin Teks';
+                    e.target.style.color = 'var(--primary-color)';
+                }, 2000);
+
+            } catch (err) {
+                console.error('Gagal menyalin teks: ', err);
+            }
+
+            window.getSelection().removeAllRanges();
+        });
     });
 });

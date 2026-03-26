@@ -3,50 +3,56 @@
 <head>
     <meta charset="UTF-8">
     <link rel="stylesheet" href="popup.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="container">
-        <h3>📚 SitasiInstan Pro</h3>
-        <p class="subtitle">APA 7th & Chicago 17th (Smart Casing)</p>
+        <h3>SitasiInstan Pro</h3>
+        <p class="subtitle">Format Cepat APA 7th & Chicago 17th</p>
         
-        <button id="btn-extract" class="btn-primary">Ambil Data Halaman</button>
+        <button id="btn-extract" class="btn-primary">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-down-circle"><circle cx="12" cy="12" r="10"></circle><polyline points="8 12 12 16 16 12"></polyline><line x1="12" y1="8" x2="12" y2="16"></line></svg>
+            <span>Ambil Data Halaman</span>
+        </button>
         <hr>
 
         <div class="form-group">
-            <label>Judul Artikel</label>
-            <input type="text" id="title" placeholder="Judul jurnal...">
+            <label for="title">Judul Artikel</label>
+            <input type="text" id="title" placeholder="Cth: Analisis Sentimen Media Sosial...">
         </div>
 
         <div class="form-group">
-            <label>Penulis</label>
-            <input type="text" id="author" placeholder="Nama penulis...">
+            <label for="author">Penulis</label>
+            <input type="text" id="author" placeholder="Cth: Budi Sanjoyo, Siti Lestari...">
         </div>
 
         <div class="form-group">
-            <label>Nama Jurnal / Penerbit</label>
-            <input type="text" id="journal" placeholder="Nama jurnal...">
+            <label for="journal">Nama Jurnal / Penerbit</label>
+            <input type="text" id="journal" placeholder="Cth: Jurnal Tekno-Informatika...">
         </div>
 
         <div class="form-group">
-            <label>Tahun</label>
-            <input type="text" id="year" placeholder="2024">
+            <label for="year">Tahun Terbit</label>
+            <input type="text" id="year" placeholder="Cth: 2024">
         </div>
 
         <button id="btn-generate" class="btn-secondary">Buat Format Sitasi</button>
         <p id="status-msg"></p>
 
-        <div id="result-section" style="display: none; margin-top: 15px;">
+        <div id="result-section">
             <div class="style-group">
                 <span class="badge badge-apa">APA 7th Edition</span>
                 <div class="result-item">
                     <label>Daftar Pustaka:</label>
                     <div class="citation-box" id="apa-ref"></div>
-                    <button class="btn-copy" data-target="apa-ref">Copy Reference</button>
+                    <button class="btn-copy" data-target="apa-ref">Salin Teks</button>
                 </div>
                 <div class="result-item">
-                    <label>Sitasi Teks (Bodynote):</label>
+                    <label>Sitasi Teks (In-text):</label>
                     <div class="citation-box" id="apa-body"></div>
-                    <button class="btn-copy" data-target="apa-body">Copy Bodynote</button>
+                    <button class="btn-copy" data-target="apa-body">Salin Teks</button>
                 </div>
             </div>
 
@@ -55,12 +61,12 @@
                 <div class="result-item">
                     <label>Daftar Pustaka (Bibliography):</label>
                     <div class="citation-box" id="chi-bib"></div>
-                    <button class="btn-copy" data-target="chi-bib">Copy Bibliography</button>
+                    <button class="btn-copy" data-target="chi-bib">Salin Teks</button>
                 </div>
                 <div class="result-item">
                     <label>Catatan Kaki (Footnote):</label>
                     <div class="citation-box" id="chi-foot"></div>
-                    <button class="btn-copy" data-target="chi-foot">Copy Footnote</button>
+                    <button class="btn-copy" data-target="chi-foot">Salin Teks</button>
                 </div>
             </div>
         </div>
