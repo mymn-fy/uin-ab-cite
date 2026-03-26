@@ -54,6 +54,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     document.getElementById('author').value = smartCase(response.author);
                     document.getElementById('journal').value = smartCase(response.journal);
                     document.getElementById('year').value = response.year || "";
+                    document.getElementById('doi').value = response.doi || ""; // Populate DOI field
                     statusMsg.innerText = "Data berhasil diekstrak!";
                 } else {
                     statusMsg.innerText = "Tidak ada data yang dapat ditemukan di halaman ini.";
@@ -68,6 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const author = document.getElementById('author').value.trim();
             const journal = document.getElementById('journal').value.trim() || "Nama Jurnal Tidak Diketahui";
             const year = document.getElementById('year').value.trim() || "t.t."; // (t.t. -> tanpa tahun)
+            const doi = document.getElementById('doi').value.trim();
 
             if (!title || !author) {
                 statusMsg.innerText = "Judul dan Penulis wajib diisi.";
@@ -75,11 +77,22 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             statusMsg.innerText = ""; // Clear status on success
 
-            const apaRef = `${formatNameAPA(author)} (${year}). ${title}. <i>${journal}</i>.`;
+            let doiLink = "";
+            if (doi) {
+                // Cek jika sudah merupakan URL lengkap
+                if (doi.startsWith('http')) {
+                    doiLink = doi;
+                } else {
+                // Jika hanya DOI (misal: 10.xxxx/...), tambahkan prefix
+                    doiLink = `https://doi.org/${doi}`;
+                }
+            }
+
+            const apaRef = `${formatNameAPA(author)} (${year}). ${title}. <i>${journal}</i>. ${doiLink ? `<a href="${doiLink}" target="_blank">${doiLink}</a>` : ''}`;
             const apaBody = `(${smartCase(author.split(" ").pop())}, ${year})`;
 
-            const chiBib = `${formatNameChiBib(author)}. "${title}." <i>${journal}</i>, ${year}.`;
-            const chiFoot = `${smartCase(author)}, "${title}," <i>${journal}</i> (${year}).`;
+            const chiBib = `${formatNameChiBib(author)}. "${title}." <i>${journal}</i>, ${year}. ${doiLink ? `<a href="${doiLink}" target="_blank">${doiLink}</a>.` : ''}`;
+            const chiFoot = `${smartCase(author)}, "${title}," <i>${journal}</i> (${year}), ${doiLink ? `akses pada ${doiLink}`: ''}.`;
 
             document.getElementById('apa-ref').innerHTML = apaRef;
             document.getElementById('apa-body').innerHTML = apaBody;
