@@ -1,0 +1,55 @@
+body {
+    width: 320px;
+    font-family: 'Segoe UI', sans-serif;
+    padding: 15px;
+    background-color: #f9f9f9;
+}
+
+.container h3 { margin: 0; text-align: center; color: #2c3e50; }
+.subtitle { font-size: 11px; text-align: center; color: gray; margin-bottom: 15px; }
+
+.form-group { margin-bottom: 10px; }
+label { display: block; font-size: 11px; font-weight: bold; margin-bottom: 3px; }
+input { width: 100%; padding: 7px; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px; }
+
+button { width: 100%; padding: 10px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+.btn-primary { background-color: #3498db; color: white; margin-bottom: 10px; }
+.btn-secondary { background-color: #2ecc71; color: white; }
+
+.citation-box {
+    background: white;
+    border: 1px dashed #3498db;
+    padding: 8px;
+    font-size: 11px;
+    margin: 5px 0;
+    min-height: 30px;
+}
+
+.btn-copy {
+    background-color: #f39c12;
+    color: white;
+    font-size: 10px;
+    padding: 4px;
+    margin-bottom: 15px;
+}
+
+#status-msg { font-size: 11px; text-align: center; color: #e67e22; }
+
+/* Tambahkan di bawah popup.css */
+.export-actions {
+    display: flex;
+    justify-content: space-between;
+}
+
+.btn-export {
+    background-color: #34495e;
+    color: white;
+    font-size: 9px;
+    padding: 8px;
+    width: 48%; /* Agar dua tombol sejajar */
+    border-radius: 4px;
+}
+
+.btn-export:hover {
+    background-color: #2c3e50;
+}

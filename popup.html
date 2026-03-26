@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="container">
+        <h3>📚 SitasiInstan</h3>
+        <p class="subtitle">Ambil data jurnal secara otomatis</p>
+        
+        <button id="btn-extract" class="btn-primary">Ambil Data Halaman</button>
+
+        <hr>
+
+        <div class="form-group">
+            <label>Judul Artikel</label>
+            <input type="text" id="title" placeholder="Judul jurnal...">
+        </div>
+
+        <div class="form-group">
+            <label>Penulis</label>
+            <input type="text" id="author" placeholder="Contoh: Budi Santoso">
+        </div>
+
+        <div class="form-group">
+            <label>Tahun</label>
+            <input type="text" id="year" placeholder="2024">
+        </div>
+
+        <button id="btn-generate" class="btn-secondary">Buat Format Sitasi</button>
+        <p id="status-msg"></p>
+
+        <!-- Bagian Hasil Langsung -->
+        <div id="result-section" style="display: none; margin-top: 15px;">
+            <div class="result-item">
+                <label>APA 7th Edition:</label>
+                <div class="citation-box" id="apa-result"></div>
+                <button class="btn-copy" data-target="apa-result">Copy APA</button>
+            </div>
+
+            <div class="result-item">
+                <label>Chicago Style:</label>
+                <div class="citation-box" id="chicago-result"></div>
+                <button class="btn-copy" data-target="chicago-result">Copy Chicago</button>
+            </div>
+
+            <!-- Tambahkan ini di bawah tombol Copy Chicago -->
+<div class="export-actions" style="margin-top: 15px; display: flex; gap: 5px;">
+    <button id="btn-bibtex" class="btn-export">Download BibTeX (.bib)</button>
+    <button id="btn-ris" class="btn-export">Download RIS (.ris)</button>
+</div>
+        </div>
+    </div>
+    <script src="popup.js"></script>
+</body>
+</html>
