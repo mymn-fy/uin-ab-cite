@@ -253,6 +253,29 @@ document.addEventListener('DOMContentLoaded', () => {
             window.getSelection().removeAllRanges();
         });
     });
+
+    // --- Dark Mode Logic ---
+    const iconSun = document.getElementById('icon-sun');
+    const iconMoon = document.getElementById('icon-moon');
+    
+    const enableDarkMode = () => {
+        document.body.classList.add('dark-mode');
+        localStorage.setItem('darkMode', 'enabled');
+    };
+    
+    const disableDarkMode = () => {
+        document.body.classList.remove('dark-mode');
+        localStorage.setItem('darkMode', 'disabled');
+    };
+
+    // Check for saved preference on load
+    if (localStorage.getItem('darkMode') === 'enabled') {
+        enableDarkMode();
+    }
+
+    // Add click listeners to icons
+    iconSun.addEventListener('click', enableDarkMode);
+    iconMoon.addEventListener('click', disableDarkMode);
 });
 
 // This function is injected into the page to extract data.

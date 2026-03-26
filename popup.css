@@ -5,39 +5,80 @@
     --secondary-color: #6C757D;
     --success-color: #28A745;
     --danger-color: #DC3545;
-    --light-bg: #F8F9FA;
-    --dark-text: #212529;
-    --light-text: #6C757D;
-    --border-color: #DEE2E6;
     --white: #FFFFFF;
+
+    /* Light Theme */
+    --bg-color: #F8F9FA;
+    --text-color: #212529;
+    --subtle-text-color: #6C757D;
+    --border-color: #DEE2E6;
+    --input-bg-color: #FFFFFF;
     --box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    --citation-bg: #f8f9fa;
+}
+
+body.dark-mode {
+    /* Dark Theme */
+    --bg-color: #1A1A1A;
+    --text-color: #E0E0E0;
+    --subtle-text-color: #8C8C8C;
+    --border-color: #444444;
+    --input-bg-color: #2C2C2C;
+    --box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    --citation-bg: #252525;
 }
 
 body {
     width: 380px;
     font-family: 'Inter', sans-serif;
-    background-color: var(--light-bg);
-    color: var(--dark-text);
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    transition: background-color 0.3s, color 0.3s;
 }
 
 .container {
     padding: 24px;
 }
 
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 8px;
+}
+
 h3 {
     font-size: 22px;
     font-weight: 700;
-    text-align: center;
-    margin: 0 0 8px 0;
-    color: var(--dark-text);
+    margin: 0;
+    color: var(--text-color);
+    text-align: left;
 }
 
 .subtitle {
     font-size: 12px;
-    text-align: center;
-    color: var(--light-text);
-    margin-bottom: 24px;
+    text-align: left;
+    color: var(--subtle-text-color);
+    margin: 4px 0 24px 0;
     font-weight: 500;
+}
+
+/* --- Theme Icons --- */
+.theme-toggle-icons svg {
+    cursor: pointer;
+    color: var(--text-color);
+}
+
+#icon-moon {
+    display: none; /* Hidden by default */
+}
+
+body.dark-mode #icon-sun {
+    display: none;
+}
+
+body.dark-mode #icon-moon {
+    display: block;
 }
 
 .btn-primary {
@@ -76,10 +117,10 @@ label {
     font-size: 12px;
     font-weight: 600;
     margin-bottom: 6px;
-    color: var(--dark-text);
+    color: var(--text-color);
 }
 
-input[type="text"] {
+input[type="text"], select {
     width: 100%;
     padding: 10px 12px;
     box-sizing: border-box;
@@ -87,15 +128,17 @@ input[type="text"] {
     border-radius: 6px;
     font-size: 14px;
     font-family: 'Inter', sans-serif;
-    background-color: var(--white);
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    background-color: var(--input-bg-color);
+    color: var(--text-color);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.3s, color 0.3s;
 }
+
 
 input[type="text"]::placeholder {
     color: #a9b1b9;
 }
 
-input[type="text"]:focus {
+input[type="text"]:focus, select:focus {
     outline: none;
     border-color: var(--primary-color);
     box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.15);
@@ -134,12 +177,13 @@ input[type="text"]:focus {
 }
 
 .style-group {
-    background: var(--white);
+    background: var(--input-bg-color);
     border: 1px solid var(--border-color);
     padding: 20px;
     border-radius: 12px;
     margin-top: 20px;
     box-shadow: var(--box-shadow);
+    transition: background-color 0.3s;
 }
 
 .badge {
@@ -166,19 +210,20 @@ input[type="text"]:focus {
 .result-item label {
     font-size: 12px;
     font-weight: 600;
-    color: var(--light-text);
+    color: var(--subtle-text-color);
 }
 
 .citation-box {
-    background-color: #f8f9fa;
+    background-color: var(--citation-bg);
     border-left: 3px solid var(--primary-color);
     padding: 12px;
     font-size: 13px;
-    color: var(--dark-text);
+    color: var(--text-color);
     margin: 8px 0;
     line-height: 1.6;
     border-radius: 0 4px 4px 0;
     word-wrap: break-word;
+    transition: background-color 0.3s;
 }
 
 .citation-box i {
