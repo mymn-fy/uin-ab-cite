@@ -125,26 +125,38 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            // --- APA 7 ---
-            const apaRef = `${formatAuthorsAPA(authors)} (${year}). ${title}. <i>${journal}</i>. ${doiLink ? `<a href="${doiLink}" target="_blank">${doiLink}</a>` : ''}`;
-            
-            let apaBody = "";
-            if (authors.length === 1) {
-                apaBody = `(${smartCase(authors[0].split(' ').pop())}, ${year})`;
-            } else if (authors.length === 2) {
-                apaBody = `(${smartCase(authors[0].split(' ').pop())} & ${smartCase(authors[1].split(' ').pop())}, ${year})`;
-            } else { // 3 or more
-                apaBody = `(${smartCase(authors[0].split(' ').pop())} et al., ${year})`;
+            const selectedStyle = document.querySelector('input[name="citation-style"]:checked').value;
+
+            const apaResult = document.getElementById('apa-result');
+            const chicagoResult = document.getElementById('chicago-result');
+
+            if (selectedStyle === 'apa') {
+                // --- APA 7 ---
+                const apaRef = `${formatAuthorsAPA(authors)} (${year}). ${title}. <i>${journal}</i>. ${doiLink ? `<a href="${doiLink}" target="_blank">${doiLink}</a>` : ''}`;
+                let apaBody = "";
+                if (authors.length === 1) {
+                    apaBody = `(${smartCase(authors[0].split(' ').pop())}, ${year})`;
+                } else if (authors.length === 2) {
+                    apaBody = `(${smartCase(authors[0].split(' ').pop())} & ${smartCase(authors[1].split(' ').pop())}, ${year})`;
+                } else { // 3 or more
+                    apaBody = `(${smartCase(authors[0].split(' ').pop())} et al., ${year})`;
+                }
+                document.getElementById('apa-ref').innerHTML = apaRef;
+                document.getElementById('apa-body').innerHTML = apaBody;
+                
+                apaResult.style.display = 'block';
+                chicagoResult.style.display = 'none';
+
+            } else if (selectedStyle === 'chicago') {
+                // --- Chicago 17 ---
+                const chiBib = `${formatAuthorsChiBib(authors)}. "${title}." <i>${journal}</i>, ${year}. ${doiLink ? `<a href="${doiLink}" target="_blank">${doiLink}</a>.` : ''}`;
+                const chiFoot = `${formatAuthorsChiFoot(authors)}, "${title}," <i>${journal}</i> (${year}), ${doiLink ? `akses pada ${doiLink}`: ''}.`;
+                document.getElementById('chi-bib').innerHTML = chiBib;
+                document.getElementById('chi-foot').innerHTML = chiFoot;
+
+                apaResult.style.display = 'none';
+                chicagoResult.style.display = 'block';
             }
-
-            // --- Chicago 17 ---
-            const chiBib = `${formatAuthorsChiBib(authors)}. "${title}." <i>${journal}</i>, ${year}. ${doiLink ? `<a href="${doiLink}" target="_blank">${doiLink}</a>.` : ''}`;
-            const chiFoot = `${formatAuthorsChiFoot(authors)}, "${title}," <i>${journal}</i> (${year}), ${doiLink ? `akses pada ${doiLink}`: ''}.`;
-
-            document.getElementById('apa-ref').innerHTML = apaRef;
-            document.getElementById('apa-body').innerHTML = apaBody;
-            document.getElementById('chi-bib').innerHTML = chiBib;
-            document.getElementById('chi-foot').innerHTML = chiFoot;
 
             document.getElementById('result-section').style.display = 'block';
         });
