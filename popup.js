@@ -83,6 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const btnExtract = document.getElementById('btn-extract');
     const btnGenerate = document.getElementById('btn-generate');
+    const btnDownloadRis = document.getElementById('btn-download-ris');
     const statusMsg = document.getElementById('status-msg');
     const journalField = document.getElementById('journal').parentElement;
     const repositoryFields = document.getElementById('repository-fields');
@@ -222,7 +223,71 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             document.getElementById('result-section').style.display = 'block';
+            btnDownloadRis.style.display = 'inline-flex';
         });
+    }
+
+    if (btnDownloadRis) {
+        btnDownloadRis.addEventListener('click', () => {
+            const title = document.getElementById('title').value.trim();
+            const authors = document.getElementById('author').value.split(';').map(name => name.trim()).filter(name => name);
+            const journal = document.getElementById('journal').value.trim();
+            const university = document.getElementById('university').value.trim();
+            const docType = document.getElementById('doc-type').value;
+            const year = document.getElementById('year').value.trim();
+            const doi = document.getElementById('doi').value.trim();
+
+            let risContent = "";
+            if (currentPageType === 'repository') {
+                risContent += `TY  - ${getRisDocType(docType)}\n`;
+            } else {
+                risContent += "TY  - JOUR\n";
+            }
+            risContent += `T1  - ${title}\n`;
+            authors.forEach(author => {
+                risContent += `AU  - ${author}\n`;
+            });
+            if (currentPageType === 'repository') {
+                risContent += `PB  - ${university}\n`;
+            } else {
+                risContent += `JO  - ${journal}\n`;
+            }
+            risContent += `PY  - ${year}\n`;
+            if (doi) {
+                risContent += `DO  - ${doi}\n`;
+                risContent += `UR  - https://doi.org/${doi}\n`;
+            }
+            risContent += "ER  - \n";
+
+            const blob = new Blob([risContent], { type: 'application/x-research-info-systems' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const safeTitle = title.replace(/[^a-z0-9]/gi, '_').substring(0, 20);
+            a.download = `${safeTitle}.ris`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
+    }
+
+    function getRisDocType(docType) {
+        const lowerDocType = docType.toLowerCase();
+        if (lowerDocType.includes('tesis') || lowerDocType.includes('thesis')) {
+            return 'THES';
+        } else if (lowerDocType.includes('disertasi') || lowerDocType.includes('dissertation')) {
+            return 'THES';
+        } else if (lowerDocType.includes('skripsi') || lowerDocType.includes('bachelor')) {
+            return 'THES';
+        } else if (lowerDocType.includes('buku') || lowerDocType.includes('book')) {
+            return 'BOOK';
+        } else if (lowerDocType.includes('laporan') || lowerDocType.includes('report')) {
+            return 'RPRT';
+        } else if (lowerDocType.includes('konferensi') || lowerDocType.includes('conference')) {
+            return 'CONF';
+        }
+        return 'GEN';
     }
 
     document.querySelectorAll('.btn-copy').forEach(button => {
