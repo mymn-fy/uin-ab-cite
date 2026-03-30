@@ -1,3 +1,8 @@
+// --- SITASIINSTAN PRO v1.2 ---
+// PDF.js Worker Configuration (gunakan pdf.worker.js bukan .min.js)
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdf.worker.js';
+
+// --- HELPER FUNCTIONS ---
 function sentenceCase(str) {
     if (!str) return "";
     const lower = str.toLowerCase();
@@ -6,18 +11,28 @@ function sentenceCase(str) {
 
 function smartCase(str) {
     if (!str) return "";
+    // Daftar singkatan yang harus tetap HURUF BESAR semua
+    const abbreviations = new Set([
+        'UIN','IAIN','UGM','UI','ITB','IPB','ITS','UNAIR','UNDIP','UNY','UNS','UNPAD',
+        'UNHAS','UNEJ','UB','UM','UPI','UNM','UNSYIAH','USK','UNSOED','UNIKAL',
+        'STAIN','STAI','STIT','STIS','STKIP','IKIP','FISIP','FKIP','FMIPA','FK',
+        'FH','FE','FT','SD','SMP','SMA','SMK','S1','S2','S3','OJS','DOI','ISBN',
+        'ISSN','NIM','NIP','RT','RW','DKI','RI','PNS','ASN','TNI','POLRI'
+    ]);
 
-    // Apply title case to the whole string.
-    let titleCased = str.toLowerCase().replace(/\b\w/g, char => char.toUpperCase());
-
-    // Fix acronyms in parentheses by uppercasing them.
-    titleCased = titleCased.replace(/\(([^)]+)\)/g, (match, content) => {
-        return `(${content.toUpperCase()})`;
+    return str.replace(/\S+/g, word => {
+        // Hapus tanda baca di awal/akhir kata untuk pengecekan
+        const cleaned = word.replace(/^[^a-zA-Z]+|[^a-zA-Z]+$/g, '');
+        if (abbreviations.has(cleaned.toUpperCase())) {
+            // Kembalikan dengan tanda baca asli tapi hurufnya all-caps
+            return word.replace(cleaned, cleaned.toUpperCase());
+        }
+        // Title case biasa
+        return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
     });
-
-    return titleCased;
 }
 
+// --- FORMATTER NAMA ---
 function formatAuthorsAPA(authors) {
     if (authors.length === 0) return "Anonim";
     
@@ -37,7 +52,7 @@ function formatAuthorsAPA(authors) {
         return formattedNames.join(' & ');
     } else if (formattedNames.length > 2 && formattedNames.length <= 20) {
         return `${formattedNames.slice(0, -1).join(', ')}, & ${formattedNames.slice(-1)}`;
-    } else { // More than 20 authors
+    } else {
         return `${formattedNames.slice(0, 19).join(', ')}, ..., ${formattedNames.slice(-1)}`;
     }
 }
@@ -50,7 +65,6 @@ function formatAuthorsChiBib(authors) {
         if (parts.length > 1) {
             let last = smartCase(parts.pop());
             let first = smartCase(parts.join(" "));
-            // Invert only the first author's name
             return (index === 0) ? `${last}, ${first}` : `${first} ${last}`;
         }
         return smartCase(full);
@@ -71,13 +85,159 @@ function formatAuthorsChiFoot(authors) {
         return formattedNames[0];
     } else if (formattedNames.length <= 3) {
         return `${formattedNames.slice(0, -1).join(', ')} and ${formattedNames.slice(-1)}`;
-    } else { // 4 or more authors
+    } else {
         return `${smartCase(authors[0].split(" ").join(" "))} et al.`;
     }
 }
 
+// --- LOGIKA EKSTRAKSI PDF v1.2 (IMPROVED: font-size based detection) ---
+async function extractDataFromPDF(url) {
+    try {
+        const loadingTask = pdfjsLib.getDocument(url);
+        const pdf = await loadingTask.promise;
+
+        // Step 1: Coba metadata resmi PDF
+        // CATATAN: metadata sering tidak akurat di PDF Indonesia
+        // (contoh: Author = merek laptop, Title = nama file)
+        // Jadi validasi ketat sebelum dipakai — heuristik lebih dipercaya
+        const metadata = await pdf.getMetadata().catch(() => null);
+        const rawMetaTitle  = metadata?.info?.Title?.trim()  || "";
+        const rawMetaAuthor = metadata?.info?.Author?.trim() || "";
+
+        // Tolak Author jika: terlalu pendek, tidak ada spasi, atau nama merek/device
+        const brandPattern = /^(hp|dell|lenovo|asus|acer|toshiba|sony|samsung|microsoft|apple|admin|user|root|owner|unknown|pc|laptop)$/i;
+        let metaAuthor = (
+            rawMetaAuthor.length >= 5 &&
+            rawMetaAuthor.includes(' ') &&
+            !brandPattern.test(rawMetaAuthor.trim())
+        ) ? rawMetaAuthor : "";
+
+        // Tolak Title jika: terlalu pendek, mengandung path file, atau ekstensi .pdf
+        let metaTitle = (
+            rawMetaTitle.length >= 10 &&
+            !rawMetaTitle.includes('\\') &&
+            !rawMetaTitle.toLowerCase().includes('.pdf')
+        ) ? rawMetaTitle : "";
+
+        // Step 2: Baca teks halaman pertama beserta info transform (font size)
+        const firstPage  = await pdf.getPage(1);
+        const textContent = await firstPage.getTextContent();
+        const rawItems   = textContent.items.filter(i => i.str.trim().length > 0);
+
+        // Step 3: Kelompokkan item berdasarkan posisi Y → satu baris
+        const lineMap = new Map();
+        rawItems.forEach(item => {
+            const y = Math.round(item.transform[5]); // posisi Y
+            if (!lineMap.has(y)) lineMap.set(y, []);
+            lineMap.get(y).push(item);
+        });
+
+        // Urutkan baris dari atas ke bawah (Y besar = posisi lebih atas di PDF)
+        const lines = Array.from(lineMap.entries())
+            .sort((a, b) => b[0] - a[0])
+            .map(([y, lineItems]) => ({
+                y,
+                text: lineItems.map(i => i.str).join(' ').trim(),
+                fontSize: Math.max(...lineItems.map(i => Math.abs(i.transform[3]) || 10))
+            }))
+            .filter(line => line.text.length > 0);
+
+        const fullText = lines.map(l => l.text).join(' ');
+
+        // Step 4: DOI
+        const doiRegex = /(10\.\d{4,9}\/[-._;()/:A-Z0-9]+)/i;
+        const doiMatch = fullText.match(doiRegex);
+        const doi = doiMatch ? "https://doi.org/" + doiMatch[0] : url;
+
+        // Step 5: Tahun
+        const yearMatch = fullText.match(/\b(20|19)\d{2}\b/);
+        const year = yearMatch ? yearMatch[0] : "";
+
+        // Step 5b: Volume & Nomor
+        // Pola: "Vol. 16 No. 2", "Volume 16 Nomor 2", "Vol. 16, No. 2"
+        let volume = "", issue = "";
+        const volNoRegex = /[Vv]ol(?:ume)?\.?\s*(\d+)[,\s]+[Nn]o(?:mor)?\.?\s*(\d+)/;
+        const volOnlyRegex = /[Vv]ol(?:ume)?\.?\s*(\d+)/;
+        const noOnlyRegex = /[Nn]o(?:mor)?\.?\s*(\d+)/;
+        const volNoMatch = fullText.match(volNoRegex);
+        if (volNoMatch) {
+            volume = volNoMatch[1];
+            issue  = volNoMatch[2];
+        } else {
+            const volMatch = fullText.match(volOnlyRegex);
+            if (volMatch) volume = volMatch[1];
+            const noMatch = fullText.match(noOnlyRegex);
+            if (noMatch) issue = noMatch[1];
+        }
+
+        // Step 6: Judul = baris dengan font size TERBESAR
+        const maxFontSize = Math.max(...lines.map(l => l.fontSize));
+        const titleLines  = lines.filter(l => l.fontSize >= maxFontSize - 1);
+        let title = metaTitle || titleLines.map(l => l.text).join(' ').trim();
+
+        // Step 7: Nama Jurnal
+        // Pola: baris kecil di atas judul yang mengandung nama jurnal atau "Vol."
+        const journalKeywords = /jurnal|journal|majalah|buletin|bulletin|media|review|proceeding|konferensi/i;
+        const skipWords = /issn|doi|email|@|http|diajukan|direvisi|diterima|abstract|abstrak|intisari/i;
+        let journal = "";
+
+        for (const line of lines) {
+            if (line.fontSize >= maxFontSize) continue; // skip judul
+            if (skipWords.test(line.text)) continue;
+            if (journalKeywords.test(line.text)) {
+                // Bersihkan info volume: "Media Informasi Vol. 32, No. 1, Tahun 2023" → "Media Informasi"
+                journal = line.text.replace(/\s+(Vol\.|Volume|No\.|Nomor|Tahun|Issue|Edisi).*/i, '').trim();
+                break;
+            }
+            // Fallback: baris paling atas yang mengandung "Vol." → ambil bagian sebelumnya sebagai nama jurnal
+            if (/vol\.|volume/i.test(line.text) && !journal) {
+                journal = line.text.replace(/\s+(Vol\.|Volume|No\.|Nomor|Tahun|Issue|Edisi).*/i, '').trim();
+                break;
+            }
+        }
+
+        // Step 8: Penulis
+        // Cari baris di bawah judul yang Title Case, tidak mengandung skip words
+        let author = metaAuthor;
+        if (!author) {
+            const titleMinY = Math.min(...titleLines.map(l => l.y)); // posisi Y terbawah judul
+
+            for (const line of lines) {
+                if (line.y >= titleMinY) continue; // lewati judul dan area di atasnya
+                if (skipWords.test(line.text)) continue;
+                if (/universitas|institut|sekolah|program|fakultas|department|college/i.test(line.text)) continue;
+                if (line.text.length < 3) continue;
+
+                // Cek Title Case: setiap kata diawali huruf kapital → kemungkinan nama orang
+                const words = line.text.split(/\s+/).filter(w => w.length > 1);
+                const isTitleCase = words.every(w => /^[A-Z\u00C0-\u024F]/.test(w));
+
+                if (isTitleCase && words.length >= 2 && words.length <= 8) {
+                    author = line.text.trim();
+                    break;
+                }
+            }
+        }
+
+        return {
+            title:    smartCase(title),
+            author:   author || "",
+            year:     year,
+            doi:      doi,
+            journal:  journal,
+            volume:   volume,
+            issue:    issue,
+            pageType: 'journal'
+        };
+
+    } catch (err) {
+        console.error("PDF Error:", err);
+        return null;
+    }
+}
+
 // --- LOGIKA UTAMA ---
-let currentPageType = 'journal'; // Global variable to store page type
+let currentPageType = 'journal';
 
 document.addEventListener('DOMContentLoaded', () => {
 
@@ -89,11 +249,38 @@ document.addEventListener('DOMContentLoaded', () => {
     const repositoryFields = document.getElementById('repository-fields');
 
     if (btnExtract) {
-        btnExtract.addEventListener('click', () => {
-            statusMsg.innerText = "Mendeteksi & Mengekstrak data...";
-            
-            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-                const tab = tabs[0];
+        btnExtract.addEventListener('click', async () => {
+            statusMsg.innerText = "Mendeteksi format file...";
+
+            let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            const url = tab.url.toLowerCase();
+
+            // --- CEK APAKAH INI FILE PDF ---
+            if (url.endsWith(".pdf") || url.includes("blob:") || url.startsWith("file:///")) {
+                statusMsg.innerText = "Membaca file PDF, harap tunggu...";
+                const pdfData = await extractDataFromPDF(tab.url);
+
+                if (pdfData) {
+                    currentPageType = 'journal';
+                    journalField.style.display = 'block';
+                    repositoryFields.style.display = 'none';
+                    document.getElementById('vol-no-fields').style.display = 'block';
+
+                    document.getElementById('title').value = pdfData.title;
+                    document.getElementById('author').value = pdfData.author;
+                    document.getElementById('year').value = pdfData.year;
+                    document.getElementById('doi').value = pdfData.doi;
+                    document.getElementById('journal').value = pdfData.journal ? smartCase(pdfData.journal) : '';
+                    document.getElementById('volume').value = pdfData.volume || '';
+                    document.getElementById('issue').value  = pdfData.issue  || '';
+                    statusMsg.innerText = "✅ Data PDF berhasil diekstrak! Periksa & koreksi jika perlu.";
+                } else {
+                    statusMsg.innerText = "❌ Gagal baca PDF. Pastikan 'Allow access to file URLs' aktif di chrome://extensions/";
+                }
+
+            } else {
+                // --- JIKA BUKAN PDF: Gunakan logika HTML (kode lama) ---
+                statusMsg.innerText = "Mendeteksi & Mengekstrak data...";
 
                 chrome.scripting.executeScript({
                     target: { tabId: tab.id },
@@ -107,14 +294,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     const response = injectionResults[0].result;
                     if (response) {
-                        currentPageType = response.pageType || 'journal'; 
+                        currentPageType = response.pageType || 'journal';
 
                         if (currentPageType === 'repository') {
                             journalField.style.display = 'none';
                             repositoryFields.style.display = 'block';
+                            document.getElementById('vol-no-fields').style.display = 'none';
                             document.getElementById('university').value = response.university ? smartCase(response.university) : '';
 
-                            // Auto-select document type
                             const docType = response.docType ? response.docType.toLowerCase() : '';
                             const docTypeSelect = document.getElementById('doc-type');
                             if (docType) {
@@ -135,19 +322,22 @@ document.addEventListener('DOMContentLoaded', () => {
                         } else {
                             journalField.style.display = 'block';
                             repositoryFields.style.display = 'none';
+                            document.getElementById('vol-no-fields').style.display = 'block';
                             document.getElementById('journal').value = response.journal ? smartCase(response.journal) : '';
                         }
-                        
+
                         document.getElementById('title').value = response.title ? smartCase(response.title) : '';
                         document.getElementById('author').value = response.author ? response.author.split(';').map(name => smartCase(name.trim())).join('; ') : '';
                         document.getElementById('year').value = response.year || "";
                         document.getElementById('doi').value = response.doi || "";
+                        document.getElementById('volume').value = response.volume || "";
+                        document.getElementById('issue').value  = response.issue  || "";
                         statusMsg.innerText = `Mode ${currentPageType} aktif. Data terisi!`;
                     } else {
                         statusMsg.innerText = "Tidak ada data metadata yang ditemukan.";
                     }
                 });
-            });
+            }
         });
     }
 
@@ -160,6 +350,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const docType = document.getElementById('doc-type').value;
             const year = document.getElementById('year').value.trim() || "t.t.";
             const doi = document.getElementById('doi').value.trim();
+            const volume = document.getElementById('volume').value.trim();
+            const issue  = document.getElementById('issue').value.trim();
 
             if (!title || authors.length === 0) {
                 statusMsg.innerText = "Judul dan Penulis wajib diisi.";
@@ -179,15 +371,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 let apaRef;
                 if (currentPageType === 'repository') {
-                    // Per user request, repository titles are Title Cased for APA
-                    const repoTitle = smartCase(title); 
+                    const repoTitle = smartCase(title);
                     apaRef = `${formatAuthorsAPA(authors)} (${year}). <i>${repoTitle}</i> [${docType}, ${apaUniversity}]. ${doiLink ? `<a href="${doiLink}" target="_blank">${doiLink}</a>` : ''}`;
                 } else {
-                    // Journal articles follow standard APA sentence case
+                    // Format APA jurnal dengan vol/no
+                    // Ada vol+no : Judul Artikel. Nama Jurnal, 16(2), 2023.
+                    // Ada vol saja: Judul Artikel. Nama Jurnal, 16, 2023.
+                    // Tidak ada  : Judul Artikel. Nama Jurnal. 2023.
                     const journalArticleTitle = sentenceCase(title);
-                    apaRef = `${formatAuthorsAPA(authors)} (${year}). ${journalArticleTitle}. <i>${apaJournalTitle || "Nama Jurnal Tidak Diketahui"}</i>. ${doiLink ? `<a href="${doiLink}" target="_blank">${doiLink}</a>` : ''}`;
+                    const jTitle = apaJournalTitle || "Nama Jurnal Tidak Diketahui";
+                    let volIssueStr = "";
+                    if (volume && issue) volIssueStr = `, ${volume}(${issue}),`;
+                    else if (volume)     volIssueStr = `, ${volume},`;
+                    else                 volIssueStr = ".";
+                    apaRef = `${formatAuthorsAPA(authors)} (${year}). ${journalArticleTitle}. <i>${jTitle}</i>${volIssueStr} ${doiLink ? `<a href="${doiLink}" target="_blank">${doiLink}</a>` : ''}`;
                 }
-                
+
                 let apaBody;
                 if (authors.length === 1) {
                     apaBody = `(${smartCase(authors[0].split(' ').pop())}, ${year})`;
@@ -212,8 +411,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     chiBib = `${formatAuthorsChiBib(authors)}. "${chiTitle}." ${docType}, ${chiUniversity}, ${year}. ${doiLink ? `<a href="${doiLink}" target="_blank">${doiLink}</a>.` : ''}`;
                     chiFoot = `${formatAuthorsChiFoot(authors)}, "${chiTitle}" (${docType}, ${chiUniversity}, ${year}), ${doiLink ? `akses pada ${doiLink}` : ''}.`;
                 } else {
-                    chiBib = `${formatAuthorsChiBib(authors)}. "${chiTitle}." <i>${chiJournal || "Nama Jurnal Tidak Diketahui"}</i>, ${year}. ${doiLink ? `<a href="${doiLink}" target="_blank">${doiLink}</a>.` : ''}`;
-                    chiFoot = `${formatAuthorsChiFoot(authors)}, "${chiTitle}," <i>${chiJournal || "Nama Jurnal Tidak Diketahui"}</i> (${year}), ${doiLink ? `akses pada ${doiLink}` : ''}.`;
+                    // Format Chicago jurnal dengan vol/no
+                    // Ada vol+no : "Judul." Nama Jurnal 16, no. 2 (2023).
+                    // Ada vol saja: "Judul." Nama Jurnal 16 (2023).
+                    // Tidak ada  : "Judul." Nama Jurnal (2023).
+                    const jTitle = chiJournal || "Nama Jurnal Tidak Diketahui";
+                    let chiVolIssue = "";
+                    if (volume && issue) chiVolIssue = ` ${volume}, no. ${issue}`;
+                    else if (volume)     chiVolIssue = ` ${volume}`;
+                    chiBib  = `${formatAuthorsChiBib(authors)}. "${chiTitle}." <i>${jTitle}</i>${chiVolIssue} (${year}). ${doiLink ? `<a href="${doiLink}" target="_blank">${doiLink}</a>.` : ''}`;
+                    chiFoot = `${formatAuthorsChiFoot(authors)}, "${chiTitle}," <i>${jTitle}</i>${chiVolIssue} (${year}), ${doiLink ? `akses pada ${doiLink}` : ''}.`;
                 }
 
                 document.getElementById('chi-bib').innerHTML = chiBib.trim();
@@ -236,6 +443,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const docType = document.getElementById('doc-type').value;
             const year = document.getElementById('year').value.trim();
             const doi = document.getElementById('doi').value.trim();
+            const volume = document.getElementById('volume').value.trim();
+            const issue  = document.getElementById('issue').value.trim();
 
             let risContent = "";
             if (currentPageType === 'repository') {
@@ -251,6 +460,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 risContent += `PB  - ${university}\n`;
             } else {
                 risContent += `JO  - ${journal}\n`;
+                if (volume) risContent += `VL  - ${volume}\n`;
+                if (issue)  risContent += `IS  - ${issue}\n`;
             }
             risContent += `PY  - ${year}\n`;
             if (doi) {
@@ -299,13 +510,13 @@ document.addEventListener('DOMContentLoaded', () => {
             range.selectNode(el);
             window.getSelection().removeAllRanges();
             window.getSelection().addRange(range);
-            
+
             try {
                 document.execCommand('copy');
                 const originalText = e.target.innerHTML;
                 e.target.innerHTML = `Tersalin! <svg width="14" viewBox="0 0 24 24" style="vertical-align: middle;" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
                 e.target.style.color = 'var(--success-color)';
-                
+
                 setTimeout(() => {
                     e.target.innerHTML = 'Salin Teks';
                     e.target.style.color = 'var(--primary-color)';
@@ -322,33 +533,29 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Dark Mode Logic ---
     const iconSun = document.getElementById('icon-sun');
     const iconMoon = document.getElementById('icon-moon');
-    
+
     const enableDarkMode = () => {
         document.body.classList.add('dark-mode');
         localStorage.setItem('darkMode', 'enabled');
     };
-    
+
     const disableDarkMode = () => {
         document.body.classList.remove('dark-mode');
         localStorage.setItem('darkMode', 'disabled');
     };
 
-    // Check for saved preference on load
     if (localStorage.getItem('darkMode') === 'enabled') {
         enableDarkMode();
     }
 
-    // Add click listeners to icons
     iconSun.addEventListener('click', enableDarkMode);
     iconMoon.addEventListener('click', disableDarkMode);
 });
 
-// This function is injected into the page to extract data.
-// It does not have access to the popup's scope.
+// --- SCRAPER WEB (diinjeksi ke tab, tidak punya akses ke scope popup) ---
 function extractPageData() {
     const getMetaContent = (name) => document.querySelector(`meta[name="${name}"]`)?.content || "";
 
-    // Author extraction
     let authors = [];
     let authorElements = document.querySelectorAll('meta[name="citation_author"]');
     if (authorElements.length > 0) {
@@ -365,32 +572,66 @@ function extractPageData() {
         }
     }
 
-    // Year extraction
     const date = getMetaContent('citation_date') || getMetaContent('eprints.date');
     const yearMatch = date.match(/\d{4}/);
     const year = yearMatch ? yearMatch[0] : "";
 
-    // University extraction
     let university = getMetaContent('citation_technical_report_institution') || getMetaContent('citation_publisher') || getMetaContent('eprints.publisher');
 
-    // Title extraction and cleaning
     let title = getMetaContent('citation_title') || getMetaContent('og:title') || document.title;
-    
-    // New logic: find pattern in title, clean it, and possibly set university
+
     const titleRegex = / - (IDR )?(.+?)( Repository)?$/i;
     const titleMatch = title.match(titleRegex);
-
     if (titleMatch) {
         const universityFromName = titleMatch[2].trim();
         if (!university) {
             university = universityFromName;
         }
-        // Clean the title by removing the matched part
         title = title.replace(titleRegex, '').trim();
     }
 
     const journal = getMetaContent('citation_journal_title') || getMetaContent('citation_publisher');
-    
+
+    // Volume & Nomor — coba meta tag dulu, fallback ke breadcrumb/teks halaman
+    let volume = getMetaContent('citation_volume') || "";
+    let issue  = getMetaContent('citation_issue')  || getMetaContent('citation_number') || "";
+
+    if (!volume || !issue) {
+        // Regex fleksibel: menangkap berbagai variasi spasi, titik, koma
+        // Contoh yang ditangkap:
+        // "Vol. 16 No. 2"  "Vol 16, No 2"  "Volume 16 Nomor 2"  "Vol. 16 No. 2 2025"
+        const volNoRegex  = /[Vv]ol(?:ume)?\.?\s*(\d+)\s*[,.]?\s*[Nn]o(?:mor)?\.?\s*(\d+)/;
+        const volOnlyRegex = /[Vv]ol(?:ume)?\.?\s*(\d+)/;
+        const noOnlyRegex  = /[Nn]o(?:mor)?\.?\s*(\d+)/;
+
+        // Kumpulkan teks dari SEMUA elemen breadcrumb yang mungkin (tidak stop di yang pertama)
+        const breadcrumbSelectors = [
+            '.breadcrumb', '.breadcrumbs', '#breadcrumb', '[aria-label="breadcrumb"]',
+            '.pkp_navigation_primary', '.pkp_structure_head',
+            'nav', '.cmp_breadcrumbs', '.submission-breadcrumb',
+            'ul.breadcrumb', 'ol.breadcrumb', '.page-header', '.entry-header'
+        ];
+        let searchText = "";
+        for (const sel of breadcrumbSelectors) {
+            const els = document.querySelectorAll(sel);
+            els.forEach(el => { searchText += " " + el.innerText; });
+        }
+
+        // Jika masih kosong atau tidak mengandung pola Vol, perluas ke seluruh halaman
+        if (!volNoRegex.test(searchText) && !volOnlyRegex.test(searchText)) {
+            searchText = document.body.innerText;
+        }
+
+        const vnMatch = searchText.match(volNoRegex);
+        if (vnMatch) {
+            if (!volume) volume = vnMatch[1];
+            if (!issue)  issue  = vnMatch[2];
+        } else {
+            if (!volume) { const m = searchText.match(volOnlyRegex); if (m) volume = m[1]; }
+            if (!issue)  { const m = searchText.match(noOnlyRegex);  if (m) issue  = m[1]; }
+        }
+    }
+
     let doi = getMetaContent('citation_doi');
     if (!doi) {
         const doiLink = Array.from(document.querySelectorAll('a')).find(a => a.href.includes('doi.org/'));
@@ -398,7 +639,7 @@ function extractPageData() {
             doi = doiLink.href;
         }
     }
-     if (!doi) {
+    if (!doi) {
         const doiRegex = /(10\.\d{4,9}\/[-._;()/:A-Z0-9]+)/i;
         const match = document.body.innerText.match(doiRegex);
         if (match) {
@@ -409,7 +650,6 @@ function extractPageData() {
         doi = document.querySelector('link[rel="canonical"]')?.href || window.location.href;
     }
 
-    // Page Type and Doc Type detection
     let pageType = 'journal';
     const docTypeString = getMetaContent('DC.type') || getMetaContent('eprints.type') || getMetaContent('bepress_document_type');
     const titleText = document.title.toLowerCase();
@@ -427,6 +667,8 @@ function extractPageData() {
         author: authors.join('; '),
         year: year,
         journal: journal,
+        volume: volume,
+        issue: issue,
         doi: doi,
         pageType: pageType,
         university: university,
