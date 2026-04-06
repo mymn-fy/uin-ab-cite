@@ -19,14 +19,23 @@ function smartCase(str) {
         'FH','FE','FT','SD','SMP','SMA','SMK','S1','S2','S3','OJS','DOI','ISBN',
         'ISSN','NIM','NIP','RT','RW','DKI','RI','PNS','ASN','TNI','POLRI'
     ]);
+    const conjunctions = new Set([
+        'dan', 'atau', 'serta', 'di', 'ke', 'dari', 'yang', 'untuk', 'dengan', 'dalam', 'pada', 'kepada', 'bagi', 'oleh', 'tentang', 'sebagai'
+    ]);
 
-    return str.replace(/\S+/g, word => {
+    let isFirstWord = true;
+    return str.replace(/\S+/g, (word) => {
         // Hapus tanda baca di awal/akhir kata untuk pengecekan
         const cleaned = word.replace(/^[^a-zA-Z]+|[^a-zA-Z]+$/g, '');
         if (abbreviations.has(cleaned.toUpperCase())) {
+            isFirstWord = false;
             // Kembalikan dengan tanda baca asli tapi hurufnya all-caps
             return word.replace(cleaned, cleaned.toUpperCase());
         }
+        if (!isFirstWord && conjunctions.has(cleaned.toLowerCase())) {
+            return word.toLowerCase();
+        }
+        isFirstWord = false;
         // Title case biasa
         return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
     });
@@ -273,6 +282,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     document.getElementById('journal').value = pdfData.journal ? smartCase(pdfData.journal) : '';
                     document.getElementById('volume').value = pdfData.volume || '';
                     document.getElementById('issue').value  = pdfData.issue  || '';
+                    document.getElementById('pages').value  = '';
                     statusMsg.innerText = "✅ Data PDF berhasil diekstrak! Periksa & koreksi jika perlu.";
                 } else {
                     statusMsg.innerText = "❌ Gagal baca PDF. Pastikan 'Allow access to file URLs' aktif di chrome://extensions/";
@@ -332,6 +342,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         document.getElementById('doi').value = response.doi || "";
                         document.getElementById('volume').value = response.volume || "";
                         document.getElementById('issue').value  = response.issue  || "";
+                        document.getElementById('pages').value  = "";
                         statusMsg.innerText = `Mode ${currentPageType} aktif. Data terisi!`;
                     } else {
                         statusMsg.innerText = "Tidak ada data metadata yang ditemukan.";
@@ -352,6 +363,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const doi = document.getElementById('doi').value.trim();
             const volume = document.getElementById('volume').value.trim();
             const issue  = document.getElementById('issue').value.trim();
+            const pages  = document.getElementById('pages').value.trim();
 
             if (!title || authors.length === 0) {
                 statusMsg.innerText = "Judul dan Penulis wajib diisi.";
@@ -375,16 +387,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     apaRef = `${formatAuthorsAPA(authors)} (${year}). <i>${repoTitle}</i> [${docType}, ${apaUniversity}]. ${doiLink ? `<a href="${doiLink}" target="_blank">${doiLink}</a>` : ''}`;
                 } else {
                     // Format APA jurnal dengan vol/no
-                    // Ada vol+no : Judul Artikel. Nama Jurnal, 16(2), 2023.
-                    // Ada vol saja: Judul Artikel. Nama Jurnal, 16, 2023.
-                    // Tidak ada  : Judul Artikel. Nama Jurnal. 2023.
+                    // Ada vol+no : Judul Artikel. Nama Jurnal, 16(2), 10-20.
+                    // Ada vol saja: Judul Artikel. Nama Jurnal, 16, 10-20.
+                    // Tidak ada  : Judul Artikel. Nama Jurnal.
                     const journalArticleTitle = sentenceCase(title);
                     const jTitle = apaJournalTitle || "Nama Jurnal Tidak Diketahui";
                     let volIssueStr = "";
-                    if (volume && issue) volIssueStr = `, ${volume}(${issue}),`;
-                    else if (volume)     volIssueStr = `, ${volume},`;
-                    else                 volIssueStr = ".";
-                    apaRef = `${formatAuthorsAPA(authors)} (${year}). ${journalArticleTitle}. <i>${jTitle}</i>${volIssueStr} ${doiLink ? `<a href="${doiLink}" target="_blank">${doiLink}</a>` : ''}`;
+                    if (volume && issue) volIssueStr = `, ${volume}(${issue})`;
+                    else if (volume)     volIssueStr = `, ${volume}`;
+                    
+                    let pagesStr = pages ? `, ${pages}` : "";
+                    apaRef = `${formatAuthorsAPA(authors)} (${year}). ${journalArticleTitle}. <i>${jTitle}</i>${volIssueStr}${pagesStr}. ${doiLink ? `<a href="${doiLink}" target="_blank">${doiLink}</a>` : ''}`;
                 }
 
                 let apaBody;
@@ -409,18 +422,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 let chiBib, chiFoot;
                 if (currentPageType === 'repository') {
                     chiBib = `${formatAuthorsChiBib(authors)}. "${chiTitle}." ${docType}, ${chiUniversity}, ${year}. ${doiLink ? `<a href="${doiLink}" target="_blank">${doiLink}</a>.` : ''}`;
-                    chiFoot = `${formatAuthorsChiFoot(authors)}, "${chiTitle}" (${docType}, ${chiUniversity}, ${year}), ${doiLink ? `akses pada ${doiLink}` : ''}.`;
+                    chiFoot = `${formatAuthorsChiFoot(authors)}, "${chiTitle}" (${docType}, ${chiUniversity}, ${year})${doiLink ? `, <a href="${doiLink}" target="_blank">${doiLink}</a>` : ''}.`;
                 } else {
-                    // Format Chicago jurnal dengan vol/no
-                    // Ada vol+no : "Judul." Nama Jurnal 16, no. 2 (2023).
-                    // Ada vol saja: "Judul." Nama Jurnal 16 (2023).
-                    // Tidak ada  : "Judul." Nama Jurnal (2023).
+                    // Format Chicago jurnal dengan vol/no/hal
                     const jTitle = chiJournal || "Nama Jurnal Tidak Diketahui";
                     let chiVolIssue = "";
                     if (volume && issue) chiVolIssue = ` ${volume}, no. ${issue}`;
                     else if (volume)     chiVolIssue = ` ${volume}`;
-                    chiBib  = `${formatAuthorsChiBib(authors)}. "${chiTitle}." <i>${jTitle}</i>${chiVolIssue} (${year}). ${doiLink ? `<a href="${doiLink}" target="_blank">${doiLink}</a>.` : ''}`;
-                    chiFoot = `${formatAuthorsChiFoot(authors)}, "${chiTitle}," <i>${jTitle}</i>${chiVolIssue} (${year}), ${doiLink ? `akses pada ${doiLink}` : ''}.`;
+                    
+                    let pagesStr = pages ? `: ${pages}` : "";
+                    
+                    chiBib  = `${formatAuthorsChiBib(authors)}. "${chiTitle}." <i>${jTitle}</i>${chiVolIssue} (${year})${pagesStr}. ${doiLink ? `<a href="${doiLink}" target="_blank">${doiLink}</a>.` : ''}`;
+                    chiFoot = `${formatAuthorsChiFoot(authors)}, "${chiTitle}," <i>${jTitle}</i>${chiVolIssue} (${year})${pagesStr}${doiLink ? `, <a href="${doiLink}" target="_blank">${doiLink}</a>` : ''}.`;
                 }
 
                 document.getElementById('chi-bib').innerHTML = chiBib.trim();
@@ -445,6 +458,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const doi = document.getElementById('doi').value.trim();
             const volume = document.getElementById('volume').value.trim();
             const issue  = document.getElementById('issue').value.trim();
+            const pages  = document.getElementById('pages').value.trim();
 
             let risContent = "";
             if (currentPageType === 'repository') {
@@ -462,6 +476,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 risContent += `JO  - ${journal}\n`;
                 if (volume) risContent += `VL  - ${volume}\n`;
                 if (issue)  risContent += `IS  - ${issue}\n`;
+                if (pages)  risContent += `SP  - ${pages}\n`;
             }
             risContent += `PY  - ${year}\n`;
             if (doi) {
@@ -507,7 +522,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const el = document.getElementById(targetId);
 
             const range = document.createRange();
-            range.selectNode(el);
+            range.selectNodeContents(el);
             window.getSelection().removeAllRanges();
             window.getSelection().addRange(range);
 
