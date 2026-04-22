@@ -569,113 +569,98 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // --- SCRAPER WEB (diinjeksi ke tab, tidak punya akses ke scope popup) ---
 function extractPageData() {
-    const getMetaContent = (name) => document.querySelector(`meta[name="${name}"]`)?.content || "";
+    const getMetaContent = (name) => document.querySelector(`meta[name="${name}"], meta[property="${name}"]`)?.content || "";
 
+    // --- 1. LOGIKA KHUSUS SCIENCEDIRECT (ELSEVIER) ---
+    // ScienceDirect menyimpan data di window.__PRELOADED_STATE__. 
+    // Kita coba ambil langsung dari script tersebut jika ada.
     let authors = [];
-    let authorElements = document.querySelectorAll('meta[name="citation_author"]');
-    if (authorElements.length > 0) {
-        authors = Array.from(authorElements).map(el => el.content);
-    } else {
-        authorElements = document.querySelectorAll('meta[name="eprints.creators_name"]');
-        if (authorElements.length > 0) {
-            authors = Array.from(authorElements).map(el => el.content);
+    try {
+        const scripts = Array.from(document.querySelectorAll('script'));
+        const stateScript = scripts.find(s => s.innerText.includes('__PRELOADED_STATE__'));
+        if (stateScript) {
+            const jsonText = stateScript.innerText.match(/window\.__PRELOADED_STATE__\s*=\s*({.*?});/s);
+            if (jsonText && jsonText[1]) {
+                const state = JSON.parse(jsonText[1]);
+                // Jalur data penulis di ScienceDirect JSON
+                const authList = state.article?.authors?.content?.[0]?.['$$'] || [];
+                const foundAuthors = authList.filter(item => item['#name'] === 'author');
+                
+                authors = foundAuthors.map(auth => {
+                    const details = auth['$$'];
+                    const givenName = details.find(d => d['#name'] === 'given-name')?.['_'] || "";
+                    const surname = details.find(d => d['#name'] === 'surname')?.['_'] || "";
+                    return `${givenName} ${surname}`.trim();
+                }).filter(n => n);
+            }
+        }
+    } catch (e) { console.log("SD JSON Scrape failed, moving to DOM..."); }
+
+    // --- 2. JIKA CARA DI ATAS GAGAL, GUNAKAN DOM SELECTOR (WEB UMUM) ---
+    if (authors.length === 0) {
+        // Coba Meta Tags standar (Google Scholar / OJS)
+        let metaAuths = document.querySelectorAll('meta[name="citation_author"], meta[name="dc.creator"]');
+        if (metaAuths.length > 0) {
+            authors = Array.from(metaAuths).map(el => el.content);
         } else {
-            const authorString = getMetaContent('author');
-            if (authorString) {
-                authors = authorString.split(/,| and /i).map(name => name.trim());
+            // Coba selector visual untuk ScienceDirect (Tombol Penulis)
+            let sdBtnAuths = document.querySelectorAll('button[data-xocs-content-type="author"] .react-xocs-alternative-link, .author-group .author');
+            if (sdBtnAuths.length > 0) {
+                authors = Array.from(sdBtnAuths).map(el => el.innerText.replace(/\d+/g, '').trim());
+            } else {
+                // Coba schema.org standar
+                let schemaAuths = document.querySelectorAll('[itemprop="author"]');
+                if (schemaAuths.length > 0) {
+                    authors = Array.from(schemaAuths).map(el => el.innerText.trim());
+                }
             }
         }
     }
 
-    const date = getMetaContent('citation_date') || getMetaContent('eprints.date');
-    const yearMatch = date.match(/\d{4}/);
-    const year = yearMatch ? yearMatch[0] : "";
+    // --- 3. EKSTRAKSI JUDUL (Ditingkatkan) ---
+    let title = getMetaContent('citation_title') || 
+                getMetaContent('og:title') || 
+                document.querySelector('h1.title-text')?.innerText || 
+                document.title;
+    
+    // Bersihkan judul dari sampah nama web
+    title = title.replace(/ - ScienceDirect$/i, '')
+                 .replace(/ \| ScienceDirect\.com.*/i, '')
+                 .replace(/ - IDR [^-]+/i, '')
+                 .trim();
 
-    let university = getMetaContent('citation_technical_report_institution') || getMetaContent('citation_publisher') || getMetaContent('eprints.publisher');
-
-    let title = getMetaContent('citation_title') || getMetaContent('og:title') || document.title;
-
-    const titleRegex = / - (IDR )?(.+?)( Repository)?$/i;
-    const titleMatch = title.match(titleRegex);
-    if (titleMatch) {
-        const universityFromName = titleMatch[2].trim();
-        if (!university) {
-            university = universityFromName;
-        }
-        title = title.replace(titleRegex, '').trim();
+    // --- 4. EKSTRAKSI TAHUN ---
+    let year = "";
+    const dateMeta = getMetaContent('citation_date') || getMetaContent('citation_publication_date');
+    if (dateMeta) {
+        const match = dateMeta.match(/\d{4}/);
+        if (match) year = match[0];
+    }
+    if (!year) {
+        const bodyText = document.body.innerText.substring(0, 3000);
+        const match = bodyText.match(/\b(19|20)\d{2}\b/);
+        if (match) year = match[0];
     }
 
-    const journal = getMetaContent('citation_journal_title') || getMetaContent('citation_publisher');
-
-    // Volume & Nomor — coba meta tag dulu, fallback ke breadcrumb/teks halaman
-    let volume = getMetaContent('citation_volume') || "";
-    let issue  = getMetaContent('citation_issue')  || getMetaContent('citation_number') || "";
-
-    if (!volume || !issue) {
-        // Regex fleksibel: menangkap berbagai variasi spasi, titik, koma
-        // Contoh yang ditangkap:
-        // "Vol. 16 No. 2"  "Vol 16, No 2"  "Volume 16 Nomor 2"  "Vol. 16 No. 2 2025"
-        const volNoRegex  = /[Vv]ol(?:ume)?\.?\s*(\d+)\s*[,.]?\s*[Nn]o(?:mor)?\.?\s*(\d+)/;
-        const volOnlyRegex = /[Vv]ol(?:ume)?\.?\s*(\d+)/;
-        const noOnlyRegex  = /[Nn]o(?:mor)?\.?\s*(\d+)/;
-
-        // Kumpulkan teks dari SEMUA elemen breadcrumb yang mungkin (tidak stop di yang pertama)
-        const breadcrumbSelectors = [
-            '.breadcrumb', '.breadcrumbs', '#breadcrumb', '[aria-label="breadcrumb"]',
-            '.pkp_navigation_primary', '.pkp_structure_head',
-            'nav', '.cmp_breadcrumbs', '.submission-breadcrumb',
-            'ul.breadcrumb', 'ol.breadcrumb', '.page-header', '.entry-header'
-        ];
-        let searchText = "";
-        for (const sel of breadcrumbSelectors) {
-            const els = document.querySelectorAll(sel);
-            els.forEach(el => { searchText += " " + el.innerText; });
-        }
-
-        // Jika masih kosong atau tidak mengandung pola Vol, perluas ke seluruh halaman
-        if (!volNoRegex.test(searchText) && !volOnlyRegex.test(searchText)) {
-            searchText = document.body.innerText;
-        }
-
-        const vnMatch = searchText.match(volNoRegex);
-        if (vnMatch) {
-            if (!volume) volume = vnMatch[1];
-            if (!issue)  issue  = vnMatch[2];
-        } else {
-            if (!volume) { const m = searchText.match(volOnlyRegex); if (m) volume = m[1]; }
-            if (!issue)  { const m = searchText.match(noOnlyRegex);  if (m) issue  = m[1]; }
-        }
-    }
-
+    // --- 5. EKSTRAKSI JURNAL & DOI ---
+    let journal = getMetaContent('citation_journal_title') || 
+                  document.querySelector('.publication-title-link')?.innerText || 
+                  getMetaContent('citation_publisher') || "";
+    
     let doi = getMetaContent('citation_doi');
     if (!doi) {
         const doiLink = Array.from(document.querySelectorAll('a')).find(a => a.href.includes('doi.org/'));
-        if (doiLink) {
-            doi = doiLink.href;
-        }
-    }
-    if (!doi) {
-        const doiRegex = /(10\.\d{4,9}\/[-._;()/:A-Z0-9]+)/i;
-        const match = document.body.innerText.match(doiRegex);
-        if (match) {
-            doi = 'https://doi.org/' + match[0];
-        }
-    }
-    if (!doi) {
-        doi = document.querySelector('link[rel="canonical"]')?.href || window.location.href;
+        doi = doiLink ? doiLink.href : "";
     }
 
-    let pageType = 'journal';
-    const docTypeString = getMetaContent('DC.type') || getMetaContent('eprints.type') || getMetaContent('bepress_document_type');
-    const titleText = document.title.toLowerCase();
-    const urlText = window.location.href.toLowerCase();
-    const repoKeywords = ['thesis', 'disertasi', 'skripsi', 'repository', 'archive', 'eprints', 'idr'];
-    if (repoKeywords.some(keyword => docTypeString.includes(keyword) || titleText.includes(keyword) || urlText.includes(keyword))) {
-        pageType = 'repository';
-    }
-    if (!journal && university) {
-        pageType = 'repository';
-    }
+    // --- 6. VOLUME & NOMOR ---
+    let volume = getMetaContent('citation_volume') || "";
+    let issue  = getMetaContent('citation_issue') || getMetaContent('citation_number') || "";
+
+    // --- 7. IDENTIFIKASI REPOSITORY ---
+    const isRepo = window.location.href.includes('repository') || 
+                window.location.href.includes('handle') || 
+                getMetaContent('DC.type').toLowerCase().includes('thesis');
 
     return {
         title: title,
@@ -685,8 +670,8 @@ function extractPageData() {
         volume: volume,
         issue: issue,
         doi: doi,
-        pageType: pageType,
-        university: university,
-        docType: docTypeString
+        pageType: isRepo ? 'repository' : 'journal',
+        university: isRepo ? journal : "",
+        docType: getMetaContent('DC.type') || ""
     };
 }
